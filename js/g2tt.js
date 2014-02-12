@@ -35,6 +35,10 @@ $(document).ready(function () {
         $('.g2tt-menu').hide();
     });
 
+    
+   
+    
+    
     $("#login").submit(function (event) {
         if (request) {
             request.abort();
@@ -159,6 +163,8 @@ $(document).ready(function () {
 
     // Back to Feeds
     $('.back-to-feeds').unbind('click').click(function () {
+	    //needs to be before functions to remove + properly.
+    	$('#add-new-subscription').removeClass('hidden')
         refreshCats();
         showFeeds();
     });
@@ -166,7 +172,7 @@ $(document).ready(function () {
     // ADDED - Subscribe to new Feeds
     $('#add-new-subscription').unbind('click').click(function () {
 	    $( "#dialog-form" ).dialog( "open" );
-	    getCategoriesForNewSubscribe();
+	    getCategoriesForNewSubscribeCondensed();
 	    
     });
 
@@ -197,18 +203,20 @@ $(document).ready(function () {
         $(this).toggle('g2tt-option-selected');
     });
 
-    // Back to Feeds from sub category
+    // Back to Feeds or Parent Category from sub category 
     $('#sub-list-back').unbind('click').click(function () {
         refreshCats();
         getFeeds(global_backCat.pop());
-            $('#add-new-subscription').removeClass('hidden');
-
+        
     });
 
     // Mark all as read
     $('#mark-these-read, #menu-mark-read').unbind('click').click(function () {
         $('body').removeClass('loaded').addClass('loading');
         $('.load-more-message').html('Marking as read...');
+		var initiator = $(this).attr('id');
+		var limit = (initiator == "mark-these-read") ? pref_Feed_limit : 200;
+
         //remove those that need to be kept unread
         keepUnread.removeFromArray(global_ids);
         var data = new Object();
@@ -221,6 +229,7 @@ $(document).ready(function () {
         request.done(function (response) {
             $('#entries').empty();
             getHeadlines();
+            
         });
     });
 
@@ -301,7 +310,7 @@ $('.ui-loader').remove();
  
     function checkRegexp( o, regexp, n ) {
     var makeOvalidHttp = o.val().trim();
-    console.log(firstToUpperCase(makeOvalidHttp) );
+    //console.log(firstToUpperCase(makeOvalidHttp) );
       if ( !( regexp.test( firstToUpperCase(makeOvalidHttp) ) ) ) {
         o.addClass( "ui-state-error" );
         updateTips( n );
@@ -364,7 +373,8 @@ $('.ui-loader').remove();
       }
     });
 
-//Added for Subscribe to New Feeds 
+//testing new prefs
+
 
 });
 
@@ -439,8 +449,7 @@ function showFeeds() {
     $('.back-to-feeds').addClass('hidden');
     $('.articlesMenu').addClass('hidden');
     $('.feedsMenu').removeClass('hidden');
-    //added to show + for adding new subscriptions
-    $('#add-new-subscription').removeClass('hidden');
+    
     if (global_parentId != '-4') {
         $('#sub-list-back').removeClass('hidden');
             //added to show + for hiding new subscriptions
@@ -477,6 +486,15 @@ function apiCall(data, asynch) {
     return request;
 }
 
+//get Preferences    
+function userPrefGetNow() {
+	var data = new Object();
+	data.op = "getPref";
+	data.pref_name = "DEFAULT_ARTICLE_LIMIT";
+	var request = apiCall(data);	
+	return request;    
+}
+
 function getHeadlines(since) {
     $('body').addClass('loading');
     $('.load-more-message').html('Loading...');
@@ -485,204 +503,240 @@ function getHeadlines(since) {
 
     //Anytime we get headlines, check if there is a search filter
     var search = $('#search-input').val();
-
-    var data = new Object();
-    data.op = "getHeadlines";
-    data.feed_id = pref_Feed;
-    //data.limit = 25;
-    //uses config.js to get feed limit
-    data.limit = pref_Feed_limit;
-    data.show_excerpt = 1;
-    data.show_content = 1;
-    data.include_attachments = 0;
-    data.view_mode = pref_ViewMode;
-    data.is_cat = pref_IsCat;
-    data.include_nested = true;
-    data.order_by = pref_OrderBy;
-    if (pref_OrderBy == "date_reverse") {
-        data.since_id = since;
-    } else {
-        data.skip = since;
-    }
-    data.search = search;
-    var headlines = apiCall(data);
-
-    headlines.done(function (response, textStatus, jqXHR) {
-        if (response['status'] != 0) {
-            $.removeCookie('g2tt_sid');
-            getData();
-            return;
-        }
-        headlines = response['content'];
-
-        if (headlines.length != data.limit) {
-            $('.load-more-message').hide();
-        } else {
-            $('.load-more-message').show();
-        }
-        $.each(headlines, function (index, headline) {
-            global_ids.push(headline.id);
-            var email_subject = headline.title;
-            var email_body = '<br><h4>Sent to you via tt-rss</h4><h2><a href="' + headline.link + '">' + headline.title + '</a></h2>' + headline.content;
-
-            var $content = $(headline.content);
-            var alt = null;
-            if($content.length == 1 && $content.is("img") && (alt = ($content.attr("title") || $content.attr("alt")))){
-              $content = $("<div>" + $content[0].outerHTML + "<div>" + alt + "</div></div>");
-            } else {
-              var $container = $("<div></div>");
-              $container.append($content);
-              $content = $container;
-            }
-
-            var date = new Date(headline.updated * 1000);
-            var entry = "<div id='" + headline.id + "' class='entry-row whisper" + ((!headline.unread) ? " read" : "") + "'> \
-            <div class='entry-container'> \
-            <div class='entry-top-bar'> \
-            <span class='link entry-next'> \
-            <span class='entry-next-fa-icon'><i class='fa fa-arrow-down'></i></span> \
-            <span class='entry-next-text'>Next item</span> \
-            </span> \
-            <span class='link entry-collapse'> \
-            <span class='entry-collapse-fa-icon'><i class='fa fa-bars'></i></span> \
-            <span class='entry-collapse-text'>Collapse</span> \
-            </span> \
-            </div> \
-            <div class='entry-header'> \
-		<div class='entry-icons'> \
-			<i class='favStarDiv fa fa-star-o fa-2x starBorder'> </i> \
-			<i class='favStar fa fa-star fa-2x "+ ((headline.marked) ? "starActive" : "starNotActive") + "'></i> \
-		</div> \
-            <div class='entry-header-body'> \
-            <div class='text'> \
-            <span class='item-title-collapsed'>" + headline.title + "</span> \
-            <a href='" + headline.link + "' \
-            class='item-title item-title-link' target='_blank'>" + headline.title + "</a> \
-            <span class='item-source-title'>&nbsp;-&nbsp;" + headline.feed_title + "</span> \
-            <div class='item-snippet'>" + (headline.excerpt || $(headline.content).text().substr(0, 100)) + "</div> \
-            </div> \
-            <div class='entry-sub-header'>by " + headline.author + " on " + date.toLocaleString() + "</div> \
-            </div> \
-            </div> \
-            <div class='entry'> \
-            <div id='entry-contents' class='entry whisper'> \
-            <div class='entry-annotations'></div> \
-            <div class='entry-contents-inner'>" + $content[0].outerHTML + "</div> \
-            </div> \
-            <div class='entry-footer'> \
-            <div class='entry-actions'> \
-            <div class='entry-actions-primary'> \
-            <i class='fa fa-square-o read-state link unselectable' title='Mark as read'>&nbsp;Mark as read</i> \
-            <span class='link unselectable' title='Sent by mail'> \
-            <i class='fa fa-envelope-o' style='vertical-align:top;'></i> \
-            <a class='link unselectable' href='mailto:?subject=" + encodeURIComponent(email_subject) + "&body=" + encodeURIComponent(email_body) + "'>E-Mail</a> \
-            </span> \
-            <wbr /> \
-            </div> \
-            </div> \
-            </div> \
-            <div class='action-area-container'></div> \
-            </div> \
-            </div> \
-            </div>";
-
-            $('#entries').append(entry);
-        });
-
-        // Expand an entry
-        $('.entry-header-body').unbind('click').click(function () {
-            if ($(this).closest('.entry-row').hasClass('expanded')) {
-                return;
-            }
-
-            $('.expanded').removeClass('expanded');
-            $(this).closest('.entry-row').addClass('expanded');
-            $('html,body').scrollTop($(this).closest('.entry-row').offset().top);
-
-            // Mark as read
-            $(this).closest('.entry-row').addClass('read');
-            $(this).closest('.entry-row').find('.read-state').addClass('fa-check-square-o').removeClass('fa-square-o');
-            var data = new Object();
-            data.op = "updateArticle";
-            data.article_ids = $(this).closest('.entry-row').attr('id');
-            data.mode = 0;
-            data.field = 2;
-            var response = apiCall(data);
-        });
-
-        // Collapse an entry
-        $('.entry-top-bar').unbind('click').click(function () {
-            $(this).closest('.entry-row').removeClass('expanded');
-        });
-
-        // Next entry
-        $('.entry-next').unbind('click').click(function (event) {
-            $(this).closest('.entry-row').next().find('.entry-header-body').trigger('click');
-            event.stopPropagation();
-        });
-
-        // Toggle read
-        $('.read-state').unbind('click').click(function () {
-            $(this).closest('.entry-row').toggleClass('read');
-            $(this).toggleClass('fa-check-square-o').toggleClass('fa-square-o');
-
-            if ($(this).hasClass('fa-square-o')) {
-                for (var i = 0; i < global_ids.length; i++) {
-                    var articleId = $(this).closest('.entry-row').attr('id');
-                    if (global_ids[i] == articleId) {
-                        global_ids.splice(i,1);
-                        keepUnread.addId(articleId);
-                    }
-                }
-            } else {
-                var articleId = $(this).closest('.entry-row').attr('id');
-                global_ids.push(articleId);
-                keepUnread.removeId(articleId);
-            }
-
-            var data = new Object();
-            data.op = "updateArticle";
-            data.article_ids = $(this).closest('.entry-row').attr('id');
-            data.mode = 2;
-            data.field = 2;
-            var response = apiCall(data);
-        });
-
-        /*
-        // Mark (star) entry
-        $('.star').unbind('click').click(function () {
-            var data = new Object();
-            data.op = "updateArticle";
-            data.article_ids = $(this).closest('.entry-row').attr('id');
-            data.mode = 2;
-            data.field = 0;
-            var response = apiCall(data);
-            $(this).toggleClass('item-star').toggleClass('item-star-active');
-        });
-        */
-        
-         // Mark NewFont (star) entry
-        $('.favStarDiv').unbind('click').click(function () {
-            var data = new Object();
-            data.op = "updateArticle";
-            data.article_ids = $(this).closest('.entry-row').attr('id');
-            data.mode = 2;
-            data.field = 0;
-            var response = apiCall(data);
-            
-            $(this).next().toggleClass('starNotActive').toggleClass('starActive');
-            //console.log(newstar);
-        });
-
-        // Done loading
-        $('body').removeClass('loading').addClass('loaded');
-        $('.load-more-message').html('Load more items...');
-        $('.entries-count').html('Showing ' + $('.entry-row').length + ' items');
-        keepUnread.clean(global_ids);
-    });
+    
+    //new preferences - gets from User Preferences, which is 30 by default.
+    var newPrefLimit = userPrefGetNow();
+    newPrefLimit.done(function (response, textStatus, jQXHR) {
+	    //console.log(response.content.value);  
+	    var pref_Feed_limit = response.content.value;
+	    
+	    var data = new Object();
+	    data.op = "getHeadlines";
+	    data.feed_id = pref_Feed;
+	    
+	    //manual override
+	    //data.limit = 25;
+	    
+	    //to use config.js to get feed limit
+	    //data.limit = pref_Feed_limit;
+	    
+	    //uses main Preferences 'DEFAULT_ARTICLE_LIMIT'
+	    data.limit = pref_Feed_limit;
+	    data.show_excerpt = 1;
+	    data.show_content = 1;
+	    data.include_attachments = 0;
+	    data.view_mode = pref_ViewMode;
+	    data.is_cat = pref_IsCat;
+	    data.include_nested = true;
+	    data.order_by = pref_OrderBy;
+	    if (pref_OrderBy == "date_reverse") {
+		data.since_id = since;
+	    } else {
+		data.skip = since;
+	    }
+	    data.search = search;
+	    var headlines = apiCall(data);
+	
+	    headlines.done(function (response, textStatus, jqXHR) {
+		if (response['status'] != 0) {
+		    $.removeCookie('g2tt_sid');
+		    getData();
+		    return;
+		}
+		headlines = response['content'];
+	
+		if (headlines.length != data.limit) {
+		    $('.load-more-message').hide();
+		} else {
+		    $('.load-more-message').show();
+		}
+		$.each(headlines, function (index, headline) {
+		    global_ids.push(headline.id);
+		    var email_subject = headline.title;
+		    var email_body = '<br><h4>Sent to you via tt-rss</h4><h2><a href="' + headline.link + '">' + headline.title + '</a></h2>' + headline.content;
+	
+		    var $content = $(headline.content);
+		    var alt = null;
+		    if($content.length == 1 && $content.is("img") && (alt = ($content.attr("title") || $content.attr("alt")))){
+		      $content = $("<div>" + $content[0].outerHTML + "<div>" + alt + "</div></div>");
+		    } else {
+		      var $container = $("<div></div>");
+		      $container.append($content);
+		      $content = $container;
+		    }
+	
+		    var date = new Date(headline.updated * 1000);
+		    var entry = "<div id='" + headline.id + "' class='entry-row whisper" + ((!headline.unread) ? " read" : "") + "'> \
+		    <div class='entry-container'> \
+		    <div class='entry-top-bar'> \
+		    <span class='link entry-next'> \
+		    <span class='entry-next-fa-icon'><i class='fa fa-arrow-down'></i></span> \
+		    <span class='entry-next-text'>Next item</span> \
+		    </span> \
+		    <span class='link entry-collapse'> \
+		    <span class='entry-collapse-fa-icon'><i class='fa fa-bars'></i></span> \
+		    <span class='entry-collapse-text'>Collapse</span> \
+		    </span> \
+		    </div> \
+		    <div class='entry-header'> \
+			<div class='entry-icons'> \
+				<i class='favStarDiv fa fa-star-o fa-2x starBorder'> </i> \
+				<i class='favStar fa fa-star fa-2x "+ ((headline.marked) ? "starActive" : "starNotActive") + "'></i> \
+			</div> \
+		    <div class='entry-header-body'> \
+		    <div class='text'> \
+		    <span class='item-title-collapsed'>" + headline.title + "</span> \
+		    <a href='" + headline.link + "' \
+		    class='item-title item-title-link' target='_blank'>" + headline.title + "</a> \
+		    <span class='item-source-title'>&nbsp;-&nbsp;" + headline.feed_title + "</span> \
+		    <div class='item-snippet'>" + (headline.excerpt || $(headline.content).text().substr(0, 100)) + "</div> \
+		    </div> \
+		    <div class='entry-sub-header'>by " + headline.author + " on " + date.toLocaleString() + "</div> \
+		    </div> \
+		    </div> \
+		    <div class='entry'> \
+		    <div id='entry-contents' class='entry whisper'> \
+		    <div class='entry-annotations'></div> \
+		    <div class='entry-contents-inner'>" + $content[0].outerHTML + "</div> \
+		    </div> \
+		    <div class='entry-footer'> \
+		    <div class='entry-actions'> \
+		    <div class='entry-actions-primary'> \
+		    <i class='fa fa-square-o read-state link unselectable' title='Mark as read'>&nbsp;Mark as read</i> \
+		    <span class='link unselectable' title='Sent by mail' style='position: relative;top: 1px;'> \
+		    <i class='fa fa-envelope-o' style='padding-left:5px'>&nbsp;<a class='link unselectable' href='mailto:?subject=" + encodeURIComponent(email_subject) + "&body=" + encodeURIComponent(email_body) + "'>E-Mail</a></i> \
+		    </span> \
+		    </div> \
+		    <div class='share_widget post-"+headline.id+"'> \
+		      <a href='//www.facebook.com/sharer.php?u="+encodeURIComponent(headline.link)+"' target='_blank'><i class='fa fa-facebook-square fa-lg'></i></a><span class='share-count'><i></i><u></u><span id='fb-count'>--</span></span> \
+			   <a href='https://twitter.com/intent/tweet?text="+encodeURIComponent(headline.title+' '+headline.link)+"' target='_blank'><i class='fa fa-twitter fa-lg' style='color:#4099FF;' alt='Share on Twitter'></i></a></a><span class='share-count'><i></i><u></u><span id='tw-count'>--</span></span> \
+				<a href='https://plus.google.com/share?url="+encodeURIComponent(headline.link)+"' target='_blank'><i class='fa fa-google-plus-square fa-lg' style='color:#d34836;' alt='Share on Google+'></i></a><span class='share-count'><i></i><u></u><span id='gp-count'>--</span></span> \
+		    <wbr /> \
+		    </div> \
+		    </div> \
+		    <div class='action-area-container'></div> \
+		    </div> \
+		    </div> \
+		    </div>";
+	
+		    $('#entries').append(entry);
+		});
+	
+		// Expand an entry
+		$('.entry-header-body').unbind('click').click(function () {
+		    if ($(this).closest('.entry-row').hasClass('expanded')) {
+			return;
+		    }
+	
+		    $('.expanded').removeClass('expanded');
+		    $(this).closest('.entry-row').addClass('expanded');
+		    $('html,body').scrollTop($(this).closest('.entry-row').offset().top);
+	
+		    // Mark as read
+		    $(this).closest('.entry-row').addClass('read');
+		    $(this).closest('.entry-row').find('.read-state').addClass('fa-check-square-o').removeClass('fa-square-o');
+		    var data = new Object();
+		    data.op = "updateArticle";
+		    data.article_ids = $(this).closest('.entry-row').attr('id');
+		    data.mode = 0;
+		    data.field = 2;
+		    var response = apiCall(data);
+		    //added Social Media icons - credit to mhawksey
+				var post_id = data.article_ids;
+				var post_url = $(this).find('a.item-title.item-title-link').attr('href');
+							// clean post url removing GA utm_ for shared count
+				post_url = post_url.replace(/\?([^#]*)/, function(_, search) {
+								search = search.split('&').map(function(v) {
+								  return !/^utm_/.test(v) && v;
+								}).filter(Boolean).join('&'); // omg filter(Boolean) so dope.
+								return search ? '?' + search : '';
+								});
+				$.sharedCount(post_url, function(data){
+						$(".share_widget.post-"+post_id+" span#tw-count").text(data.Twitter);
+						$(".share_widget.post-"+post_id+" span#fb-count").text(data.Facebook.like_count);
+						$(".share_widget.post-"+post_id+" span#gp-count").text(data.GooglePlusOne);
+						//$("#post-"+post_id+" span#li-count").text(data.LinkedIn);
+						//$("#post-"+post_id+" span#del-count").text(data.Delicious);
+				});            
+		    //added Social Media icons - credit to mhawksey
+		});
+	
+		// Collapse an entry
+		$('.entry-top-bar').unbind('click').click(function () {
+		    $(this).closest('.entry-row').removeClass('expanded');
+		});
+	
+		// Next entry
+		$('.entry-next').unbind('click').click(function (event) {
+		    $(this).closest('.entry-row').next().find('.entry-header-body').trigger('click');
+		    event.stopPropagation();
+		});
+	
+		// Toggle read
+		$('.read-state').unbind('click').click(function () {
+		    $(this).closest('.entry-row').toggleClass('read');
+		    $(this).toggleClass('fa-check-square-o').toggleClass('fa-square-o');
+	
+		    if ($(this).hasClass('fa-square-o')) {
+			for (var i = 0; i < global_ids.length; i++) {
+			    var articleId = $(this).closest('.entry-row').attr('id');
+			    if (global_ids[i] == articleId) {
+				global_ids.splice(i,1);
+				keepUnread.addId(articleId);
+			    }
+			}
+		    } else {
+			var articleId = $(this).closest('.entry-row').attr('id');
+			global_ids.push(articleId);
+			keepUnread.removeId(articleId);
+		    }
+	
+		    var data = new Object();
+		    data.op = "updateArticle";
+		    data.article_ids = $(this).closest('.entry-row').attr('id');
+		    data.mode = 2;
+		    data.field = 2;
+		    var response = apiCall(data);
+		});
+	
+		/*
+		// Mark (star) entry
+		$('.star').unbind('click').click(function () {
+		    var data = new Object();
+		    data.op = "updateArticle";
+		    data.article_ids = $(this).closest('.entry-row').attr('id');
+		    data.mode = 2;
+		    data.field = 0;
+		    var response = apiCall(data);
+		    $(this).toggleClass('item-star').toggleClass('item-star-active');
+		});
+		*/
+		
+		 // Mark NewFont (star) entry
+		$('.favStarDiv').unbind('click').click(function () {
+		    var data = new Object();
+		    data.op = "updateArticle";
+		    data.article_ids = $(this).closest('.entry-row').attr('id');
+		    data.mode = 2;
+		    data.field = 0;
+		    var response = apiCall(data);
+		    
+		    $(this).next().toggleClass('starNotActive').toggleClass('starActive');
+		    //console.log(newstar);
+		});
+	
+		// Done loading
+		$('body').removeClass('loading').addClass('loaded');
+		$('.load-more-message').html('Load more items...');
+		$('.entries-count').html('Showing ' + $('.entry-row').length + ' items');
+		keepUnread.clean(global_ids);
+	    });
+	    
+    }); //end of preflimit
 }
 
 function getTopCategories() {
+
     $('#nav-title').html('');
     $('#sub-list-back').addClass('hidden');
     if ($('#sub--4').length != 0) {
@@ -772,12 +826,14 @@ function getTopCategories() {
 function getFeeds(parent_id, parent_title, parent_unread) {
     global_parentId = parent_id;
     if (parent_id === '-4') {
+    	 //adds + button when going to main list of all folders
+    	$('#add-new-subscription').removeClass('hidden');
         getTopCategories();
         return;
     }
     $('#nav-title').html('');
     $('#sub-list-back').removeClass('hidden');
-        //added to show + for adding new subscriptions
+        //added to remove + for adding new subscriptions
         $('#add-new-subscription').addClass('hidden');
 
     if ($('#sub-' + parent_id).length != 0) {
@@ -824,7 +880,7 @@ function getFeeds(parent_id, parent_title, parent_unread) {
             $.each(feeds, function (index, feed) {
                 var entry = "<div class='row whisper sub-row" + ((feed.unread > 0) ? " unread-sub" : " no-unread-sub-row") + "" + ((feed.is_cat) ? " closed-sub-folder" : " sub") + " nested-sub' id='tree-item-" + feed.id + "'> \
         <div class='icon-cell'> \
-        <i class='fa fa-rss-square'></i> </div> \
+        " + ((feed.is_cat) ?  "<i class='fa fa-folder fa-lg'></i>"  : "<i class='fa fa-rss-square'></i>") + " </div>\
         <div class='text sub-item'>" + feed.title + "</div> \
         <div class='item-count larger whisper'> \
         <span class='item-count-value' id='tree-item-" + feed.id + "-unread-count'>" + feed.unread + "</span> \
@@ -987,6 +1043,31 @@ var keepUnread = new function() {
     };
 }
 
+//ADDED for Social Media Icons - credit to mhawksey
+jQuery.sharedCount = function(url, fn) {
+     url = encodeURIComponent(url || location.href);
+     var arg = {
+ 	    data: {
+ 	    	url : url,
+ 	    	apikey : global_sharedcountkey
+ 	    },
+         url: "//" + (location.protocol == "https:" ? "sharedcount.appspot" : "api.sharedcount") + ".com/",
+         cache: true,
+         dataType: "json"
+     };
+     if ('withCredentials' in new XMLHttpRequest) {
+         arg.success = fn;
+     }
+     else {
+         var cb = "sc_" + url.replace(/\W/g, '');
+         window[cb] = fn;
+         arg.jsonpCallback = cb;
+         arg.dataType += "p";
+     }
+     return jQuery.ajax(arg);
+ };
+
+//ADDED for Social Media Icons - credit to mhawksey
 
 //ADDED for subscribing to new feeds
 
@@ -1157,6 +1238,80 @@ function unSubscribe(url, session_id, feed_id) {
     return subscribeResult;
 }
 
+function ProcessTree(data, depth) {
+	var results = [];
+	depth = depth || 0;
+	
+	if(!data.items)
+		return [];
+	
+	for(var i=0;i<data.items.length;i++){
+		var item = data.items[i];
+		
+		if(item.type != "category"){
+			continue;
+		}
+		
+		results.push({
+				parent_bare_id: data.bare_id,
+				bare_id: item.bare_id,
+				name: item.name,
+				depth: depth
+		})
+		
+		results = results.concat(ProcessTree(item,depth+1))
+	}
+	
+	return results;
+}
+
+function getCategoriesForNewSubscribeCondensed() {
+ var data = new Object();
+ data.op = "getFeedTree";
+ data.include_empty = true;
+//        data.op = "getCategories";
+        data.enable_nested = false;
+        var catsForNew = apiCall(data);
+
+        catsForNew.done(function (response, textStatus, jqXHR) {
+            
+            var responseData = response['content'];
+            var categories = responseData.categories;
+        		
+            
+            //blahfornew = jQuery.parseJSON(catsForNew);
+            //console.log(catsForNew.categories);
+            
+            $('#catItems').find('option').remove();
+            $('#catItems').append( $('<option></option>').val(0).html('Uncategorized') );
+            
+            var FolderTree = ProcessTree(categories);
+            //console.log("FolderTree",FolderTree);
+            $.each(FolderTree, function (index, cat) {
+				var catName = cat.name;
+				var catParentId = cat.parent_bare_id;
+				var catId = cat.bare_id;
+				var catDepth = cat.depth;
+				
+				if (catDepth>0) {
+				catName = '&nbsp;&dash;&nbsp;'.concat(catName);
+					for(var i=1;i<catDepth;i++) {
+					catName = '&nbsp;&dash;'.concat(catName);
+					}
+				}
+				//console.log(catName);
+				//console.log(catParentId);
+				//console.log(catId);
+				//console.log(catDepth);
+			$('#catItems').append( $('<option></option>').val(catId).html(catName) );	
+				
+            		});
+        }).fail(function(e){
+        console.log("Error",e);	
+        });
+
+}
+
 function getCategoriesForNewSubscribe() {
  var data = new Object();
  data.op = "getFeedTree";
@@ -1167,14 +1322,16 @@ function getCategoriesForNewSubscribe() {
 
         catsForNew.done(function (response, textStatus, jqXHR) {
             catsForNew = response['content'];
-           // console.log(catsForNew);
+           
+            //blahfornew = jQuery.parseJSON(catsForNew);
+            console.log(catsForNew);
             
             $('#catItems').find('option').remove();
             $('#catItems').append( $('<option></option>').val(0).html('Uncategorized') );
             
             $.each(catsForNew, function (index, cat) {
             	$.each(cat.items, function (index, catObject){
-            	//console.log(index);
+            	//console.log(catObject);
             	var catObjectIds = [];
             	if (catObject.bare_id != -1 && catObject.bare_id != 0 ) {
             	catObjectIds.push({"parent_id":catObject.bare_id,"child_id":catObject.bare_id,"Name":catObject.name});
@@ -1183,7 +1340,8 @@ function getCategoriesForNewSubscribe() {
             //	console.log(catObject);
 			$.each(catObject.items, function(index, subcatObject){
 					var subcatObjectIds = [];
-					
+					//console.log(subcatObject)
+					//console.log(hellothere.items);
 					if (subcatObject.type == "category") {
 					//subcatObjectIds.push({"parent_id":catObject.bare_id,"child_id":subcatObject.bare_id,"Name":subcatObject.name});
 					catObjectIds.push({"parent_id":catObject.bare_id,"child_id":subcatObject.bare_id,"Name":subcatObject.name});
